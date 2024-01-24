@@ -1,0 +1,359 @@
+---
+title: "pyscenic_import_r"
+output: html_document
+date: "2024-01-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Importing the results from pyscenic 
+```{r}
+pyScenicDir <- "./data/week30/pyscenic"
+library(SCENIC)
+library(tidyverse)
+```
+
+#Reading the loom file 
+```{r}
+library(SCopeLoomR)
+pyScenicLoomFile <- file.path(pyScenicDir,"output.loom")
+loom <- open_loom(pyScenicLoomFile, mode = "r")
+```
+
+#Read info from the loom file 
+```{r}
+# Read information from loom file:
+regulons_incidMat <- get_regulons(loom, column.attr.name='Regulons')
+regulons <- regulonsToGeneLists(regulons_incidMat)
+regulonAUC <- get_regulons_AUC(loom, column.attr.name='RegulonsAUC')
+regulonsAucThresholds <- get_regulon_thresholds(loom)
+#embeddings <- get_embeddings(loom)
+```
+
+
+
+```{r}
+exprMat <- get_dgem(loom)
+cellInfo <- get_cell_annotation(loom)
+#clusterings <- get_clusterings_with_name(loom)
+```
+
+
+
+
+```{r}
+cellInfo <- readRDS(file = "./data/week30/rda/cellInfo.rds")
+cellInfo$seurat_clusters_ind <- paste(cellInfo$genotype,cellInfo$seurat_clusters,
+                                      sep = "_")
+```
+
+
+```{r}
+library(AUCell)
+library(grid)
+cellInfo <- data.frame(cellInfo)
+#regulonAUC <- loadInt(scenicOptions, "aucell_regulonAUC")
+regulonAUC <- regulonAUC[onlyNonDuplicatedExtended(rownames(regulonAUC)),]
+
+regulonActivity_byCellType <- sapply(split(rownames(cellInfo), cellInfo$genotype_clusters),
+                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
+
+regulonActivity_byCellType_Scaled <- t(scale(t(regulonActivity_byCellType), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(regulonActivity_byCellType, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 7))
+#Be careful about scaling and centering the data
+
+ComplexHeatmap::Heatmap(regulonActivity_byCellType_Scaled, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 7)
+                        )
+```
+
+##Subset on cell types and compare wild type vs mutant  
+```{r}
+#Subsetting on macrophages 
+
+#Fisrt subset only on the raw values form the regulon activity as scaling is done based on other cell types too 
+
+#First only on "Inflmatory Macrophages"
+columns_to_keep <- grep("Inflamatory Macrophages", colnames(regulonActivity_byCellType), value = TRUE)
+
+# Subset the data frame to keep only the selected columns
+regulonActivity_InflamatoryMacs <- regulonActivity_byCellType[, columns_to_keep]
+
+var_InflamatoryMacs <- apply(regulonActivity_InflamatoryMacs,1,var)
+# Sort rows based on variances
+sorted_rows <- order(var_InflamatoryMacs, decreasing = TRUE)
+# Select the top 50 rows
+top_50_InflamtoryMacs <- regulonActivity_InflamatoryMacs[sorted_rows[1:50], ]
+
+#First lets make a heatmap to get an idea about the regulons that are most likely to be changed 
+#Then we can plot histograms with the distribution of their AUC activity 
+
+#Scale now within the celltype 
+top_50_InflamtoryMacs_scaled <- t(scale(t(top_50_InflamtoryMacs), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(top_50_InflamtoryMacs, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 6))
+
+```
+
+
+```{r}
+#Scaled version of the heatmap 
+
+ComplexHeatmap::Heatmap(top_50_InflamtoryMacs_scaled, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 7)
+                        )
+```
+
+
+#We need to get the regulonActivity again : This time by individual cell types and samples : So 5 in total
+
+```{r}
+regulonActivity_byCellType_ind <- sapply(split(rownames(cellInfo), cellInfo$seurat_clusters_ind),
+                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
+```
+
+
+
+##Subset on cell types and compare wild type vs mutant(Differnece being we are doing on an individual sample scale)
+```{r}
+#Subsetting on macrophages 
+
+#Fisrt subset only on the raw values form the regulon activity as scaling is done based on other cell types too 
+
+#First only on "Inflmatory Macrophages"
+columns_to_keep <- grep("Inflamatory Macrophages", colnames(regulonActivity_byCellType_ind), value = TRUE)
+
+# Subset the data frame to keep only the selected columns
+regulonActivity_InflamatoryMacs_ind <- regulonActivity_byCellType_ind[, columns_to_keep]
+
+var_InflamatoryMacs_ind <- apply(regulonActivity_InflamatoryMacs_ind,1,var)
+# Sort rows based on variances
+sorted_rows <- order(var_InflamatoryMacs_ind, decreasing = TRUE)
+# Select the top 50 rows
+top_50_InflamtoryMacs_ind <- regulonActivity_InflamatoryMacs_ind[sorted_rows[1:50], ]
+
+#First lets make a heatmap to get an idea about the regulons that are most likely to be changed 
+#Then we can plot histograms with the distribution of their AUC activity 
+
+#Scale now within the celltype 
+top_50_InflamtoryMacs_scaled_ind <- t(scale(t(top_50_InflamtoryMacs_ind), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(top_50_InflamtoryMacs_ind, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 6))
+
+```
+
+
+```{r}
+#Scaled version of the heatmap 
+
+ComplexHeatmap::Heatmap(top_50_InflamtoryMacs_scaled_ind, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 7)
+                        )
+```
+
+##Do the exact same thing on Resident-like Macrophages 
+
+```{r}
+#Now on "Resident-like Macrophages"
+columns_to_keep <- grep("Resident-like Macrophages", colnames(regulonActivity_byCellType), value = TRUE)
+
+# Subset the data frame to keep only the selected columns
+regulonActivity_resMacs <- regulonActivity_byCellType[, columns_to_keep]
+
+var_resMacs <- apply(regulonActivity_resMacs,1,var)
+# Sort rows based on variances
+sorted_rows <- order(var_resMacs, decreasing = TRUE)
+# Select the top 50 rows
+top_50_resMacs <- regulonActivity_resMacs[sorted_rows[1:50], ]
+
+#First lets make a heatmap to get an idea about the regulons that are most likely to be changed 
+#Then we can plot histograms with the distribution of their AUC activity 
+
+#Scale now within the celltype 
+top_50_resMacs_scaled <- t(scale(t(top_50_resMacs), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(top_50_resMacs, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 6))
+
+```
+
+
+```{r}
+#Scaled version of the heatmap for resident-like macrophages
+
+ComplexHeatmap::Heatmap(top_50_resMacs_scaled, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 7)
+                        )
+```
+
+##Resident like macrophages at the individual level 
+
+```{r}
+
+#on "Resident-like Macrophages"
+columns_to_keep <- grep("Resident-like Macrophages", colnames(regulonActivity_byCellType_ind), value = TRUE)
+
+# Subset the data frame to keep only the selected columns
+regulonActivity_resMacs_ind <- regulonActivity_byCellType_ind[, columns_to_keep]
+
+var_resMacs_ind <- apply(regulonActivity_resMacs_ind,1,var)
+# Sort rows based on variances
+sorted_rows <- order(var_resMacs_ind, decreasing = TRUE)
+# Select the top 50 rows
+top_50_resMacs_ind <- regulonActivity_resMacs_ind[sorted_rows[1:50], ]
+
+#First lets make a heatmap to get an idea about the regulons that are most likely to be changed 
+#Then we can plot histograms with the distribution of their AUC activity 
+
+#Scale now within the celltype 
+top_50_resMacs_scaled_ind <- t(scale(t(top_50_resMacs_ind), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(top_50_resMacs_ind, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 6))
+
+```
+
+
+
+#Scaled version for resident like macs 
+
+```{r}
+#Scaled version of the heatmap 
+
+ComplexHeatmap::Heatmap(top_50_resMacs_scaled_ind, 
+                        name="Regulon activity",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 7)
+                        )
+```
+
+#Write a function to get the AUC values, plot the heatmap for ind vs all together, so that dont have to copy paste so many times 
+
+
+
+
+##Plot histogram of AUC values for a few tfs 
+```{r}
+#First step is to get the regulon activity of individual cells 
+regulonActivity_byCellType <- sapply(split(rownames(cellInfo), cellInfo$genotype_clusters),
+                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
+
+#Have this huge matrix with all cells vs the 266 TFs at an individual level 
+regulonActivity_by_indcells <- getAUC((regulonAUC))
+
+#Subset for resident macrophages 
+cellInfo_resMacs <- cellInfo[cellInfo$seurat_clusters == "Resident-like Macrophages",]
+selected_cols <- intersect(colnames(regulonActivity_by_indcells),rownames(cellInfo_resMacs))
+regulonActivity_resMacs_ind_cells <- regulonActivity_by_indcells[,selected_cols]
+
+#Can select tf for example : Here we select Jun 
+regulonActivity_by_indcells_Jun <- regulonActivity_resMacs_ind_cells %>%
+                                   t() %>%
+                                   as.data.frame() %>%
+                                   select("Jun(+)") %>%
+                                   rename(Jun = "Jun(+)")
+
+combined_ann_Jun <- merge(as.data.frame(regulonActivity_by_indcells_Jun), 
+                          cellInfo_resMacs, by = "row.names", 
+                          all.x = TRUE)
+library(ggplot2)
+
+
+ggplot(combined_ann_Jun, aes(x = Jun, fill = genotype)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.6) +
+  labs(title = "Histogram and Density Plot by Sample", x = "Jun(+)", y = "Density") +
+  theme_minimal()
+  
+     
+```
+
+
+
+
+```{r}
+ggplot(combined_ann_Jun, aes(x = Jun, fill = mutation)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Histogram and Density Plot by Genotype", x = "Jun(+)", y = "Density") +
+  theme_minimal()+
+  scale_fill_viridis_d()
+```
+
+
+
+
+
+
+
+##Have to find a way to set the thresholds for binarized version of the regulon activity 
+
+```{r}
+
+```
+
+
+
+##Find top regulators 
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+cellInfo <- data.frame(cellInfo)
+regulonAUC <- loadInt(scenicOptions, "aucell_regulonAUC")
+regulonAUC <- regulonAUC[onlyNonDuplicatedExtended(rownames(regulonAUC)),]
+regulonActivity_byCellType <- sapply(split(rownames(cellInfo), cellInfo$genotype_clusters),
+                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
+regulonActivity_byCellType_Scaled <- t(scale(t(regulonActivity_byCellType), center = T, scale=T))
+
+ComplexHeatmap::Heatmap(regulonActivity_byCellType, name="Regulon activity")
+#Be careful about scaling and centering the data
+ComplexHeatmap::Heatmap(regulonActivity_byCellType_Scaled, name="Regulon activity")
+```
+
+
+
+
+
+
+
+
+
+
