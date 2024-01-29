@@ -258,8 +258,6 @@ ComplexHeatmap::Heatmap(top_50_resMacs_scaled_ind,
 ##Plot histogram of AUC values for a few tfs 
 ```{r}
 #First step is to get the regulon activity of individual cells 
-regulonActivity_byCellType <- sapply(split(rownames(cellInfo), cellInfo$genotype_clusters),
-                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
 
 #Have this huge matrix with all cells vs the 266 TFs at an individual level 
 regulonActivity_by_indcells <- getAUC((regulonAUC))
@@ -291,6 +289,159 @@ ggplot(combined_ann_Jun, aes(x = Jun, fill = genotype)) +
      
 ```
 
+#WT vs TET2
+```{r}
+mean_Jun <- combined_ann_Jun %>%
+         filter(mutation == "wt" | 
+         mutation == "tet2") %>%
+         group_by(mutation) %>%
+         summarize(mean = mean(Jun))
+
+combined_ann_Jun %>%
+  filter(mutation == "wt" | 
+         mutation == "tet2") %>%
+  ggplot(aes(x = Jun, fill = mutation)) +
+  #geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  geom_vline(data = mean_Jun, aes(xintercept = mean, color = mutation),
+             linetype = "dashed")+
+  labs(title = "Density Plot by wt vs tet2", x = "Jun(+)", y = "Density") +
+  theme_minimal()
+  #scale_fill_viridis_d()
+ 
+```
+
+#Only one wt vs tet2 
+```{r}
+mean_Jun <- combined_ann_Jun %>%
+         filter(genotype == "wt_45_1" | 
+         genotype == "tet2_45_2") %>%
+         group_by(genotype) %>%
+         summarize(mean = mean(Jun))
+
+combined_ann_Jun %>%
+  filter(genotype == "wt_45_1" | 
+         genotype == "tet2_45_2") %>%
+  ggplot(aes(x = Jun, fill = genotype)) +
+  #geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  geom_vline(data = mean_Jun, aes(xintercept = mean, color = genotype),
+             linetype = "dashed")+
+  labs(title = "Density Plot by wt vs tet2", x = "Jun(+)", y = "Density") +
+  theme_minimal()
+  #scale_fill_viridis_d()
+ 
+```
+
+
+
+#WT vs TET2
+```{r}
+mean_Jun <- combined_ann_Jun %>%
+         filter(mutation == "wt" | 
+         mutation == "tet2") %>%
+         group_by(genotype) %>%
+         summarize(mean = mean(Jun))
+
+combined_ann_Jun %>%
+  filter(mutation == "wt" | 
+         mutation == "tet2") %>%
+  ggplot(aes(x = Jun, fill = genotype)) +
+  #geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  geom_vline(data = mean_Jun, aes(xintercept = mean, color = genotype),
+             linetype = "dashed")+
+  labs(title = "Density Plot by wt vs tet2", x = "Jun(+)", y = "Density") +
+  theme_minimal() +
+  scale_fill_viridis_d()
+
+```
+
+
+#WT vs DNMT3A
+```{r}
+mean_Jun <- combined_ann_Jun %>%
+         filter(mutation == "wt" | 
+         mutation == "dnmt3a") %>%
+         group_by(mutation) %>%
+         summarize(mean = mean(Jun))
+
+combined_ann_Jun %>%
+  filter(mutation == "wt" | 
+         mutation == "dnmt3a") %>%
+  ggplot(aes(x = Jun, fill = mutation)) +
+  #geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  geom_vline(data = mean_Jun, aes(xintercept = mean, color = mutation),
+             linetype = "dashed")+
+  labs(title = "Density Plot by wt vs dnmt3a", x = "Jun(+)", y = "Density") +
+  theme_minimal()
+  #scale_fill_viridis_d()
+```
+
+
+#WT vs DNMT3A
+```{r}
+mean_Jun <- combined_ann_Jun %>%
+         filter(mutation == "wt" | 
+         mutation == "dnmt3a") %>%
+         group_by(genotype) %>%
+         summarize(mean = mean(Jun))
+
+combined_ann_Jun %>%
+  filter(mutation == "wt" | 
+         mutation == "dnmt3a") %>%
+  ggplot(aes(x = Jun, fill = genotype)) +
+  #geom_histogram(aes(y = ..density..), alpha = 0.5, position = "identity", bins = 30) +
+  geom_density(alpha = 0.5) +
+  geom_vline(data = mean_Jun, aes(xintercept = mean, color = genotype),
+             linetype = "dashed")+
+  labs(title = "Density Plot by wt vs dnmt3a", x = "Jun(+)", y = "Density") +
+  theme_minimal() +
+  scale_fill_viridis_d()
+```
+
+#Wilcoxon test : WT VS TET2
+```{r}
+jun_wt_tet2 <- combined_ann_Jun %>%
+               filter(mutation == "wt" | 
+               mutation == "tet2")
+
+wt_data <- jun_wt_tet2 %>%
+           filter(mutation == "wt") %>%
+           select(Jun)
+tet2_data <- jun_wt_tet2 %>%
+           filter(mutation == "tet2") %>%
+           select(Jun)
+
+shapiro.test(wt_data$Jun)
+shapiro.test(tet2_data$Jun)
+
+wilcox.test(wt_data$Jun,tet2_data$Jun,paired = FALSE)
+wilcox.test(tet2_data$Jun,wt_data$Jun,paired = FALSE)
+```
+
+
+#Wilcoxon test : WT vs DNMT3A
+```{r}
+jun_wt_dnmt3a <- combined_ann_Jun %>%
+               filter(mutation == "wt" | 
+               mutation == "dnmt3a")
+
+wt_data <- jun_wt_dnmt3a %>%
+           filter(mutation == "wt") %>%
+           select(Jun)
+
+dnmt3a_data <- jun_wt_dnmt3a %>%
+           filter(mutation == "dnmt3a") %>%
+           select(Jun)
+
+shapiro.test(wt_data$Jun)
+shapiro.test(dnmt3a_data$Jun)
+
+wilcox.test(wt_data$Jun,dnmt3a_data$Jun,paired = FALSE)
+wilcox.test(dnmt3a_data$Jun,wt_data$Jun,paired = FALSE)
+```
 
 
 
@@ -304,10 +455,63 @@ ggplot(combined_ann_Jun, aes(x = Jun, fill = mutation)) +
 ```
 
 
+##Compute RSS score from regulon matrix 
+
+
+```{r}
+rss <- calcRSS(AUC=getAUC(regulonAUC), cellAnnotation=cellInfo[colnames(regulonAUC), "genotype_clusters"])
+rssPlot <- plotRSS(rss)
+plotly::ggplotly(rssPlot$plot)
+```
 
 
 
 
+##Compute RSS scores on cell types and not all combined 
+#First lets try for resident-like macrophages 
+
+```{r}
+
+#Subset for resident macrophages 
+cellInfo_resMacs <- cellInfo[cellInfo$seurat_clusters == "Resident-like Macrophages",]
+selected_cols <- intersect(colnames(regulonActivity_by_indcells),rownames(cellInfo_resMacs))
+regulonActivity_resMacs_ind_cells <- regulonActivity_by_indcells[,selected_cols]
+rss_res_macs <- calcRSS(AUC=regulonActivity_resMacs_ind_cells,
+                        cellAnnotation=cellInfo_resMacs[colnames(regulonActivity_resMacs_ind_cells), 
+                                                        "mutation"])
+
+var_rss_resMacs_ind <- apply(rss_res_macs,1,var)
+# Sort rows based on variances
+sorted_rows <- order(var_rss_resMacs_ind, decreasing = TRUE)
+# Select the top 50 rows
+top_50_resMacs_ind_rss <- rss_res_macs[sorted_rows[1:75], ]
+
+rssPlot <- plotRSS(top_50_resMacs_ind_rss)
+plotly::ggplotly(rssPlot$plot)
+
+```
+
+
+
+##To visualize embeddings/trajectories calculated using other methods :
+
+```{r}
+library(Seurat)
+rdaDir <- ("/Users/xsankt/Desktop/proj1_tet_dnmt3a_mouse/data/week30/rda/")
+load(file = paste0(rdaDir,"merged_seurat_harmony.rda"))
+dr_coords <- Embeddings(merged_seurat_harmony, reduction="umap")
+
+###Embedings in Seurat are also calulated only on the highly variable genes. 
+tfs <- c("Jun(+)")
+par(mfrow=c(2,2))
+AUCell::AUCell_plotTSNE(dr_coords, cellsAUC=selectRegulons(regulonAUC, tfs), plots=c("AUC", "histogram","binary"), cex = .5)
+```
+
+
+
+```{r}
+DimPlot(merged_seurat_harmony, reduction = "umap", label = T,label.size = 2)
+```
 
 ##Have to find a way to set the thresholds for binarized version of the regulon activity 
 
@@ -323,30 +527,6 @@ ggplot(combined_ann_Jun, aes(x = Jun, fill = mutation)) +
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-cellInfo <- data.frame(cellInfo)
-regulonAUC <- loadInt(scenicOptions, "aucell_regulonAUC")
-regulonAUC <- regulonAUC[onlyNonDuplicatedExtended(rownames(regulonAUC)),]
-regulonActivity_byCellType <- sapply(split(rownames(cellInfo), cellInfo$genotype_clusters),
-                                     function(cells) rowMeans(getAUC(regulonAUC)[,cells]))
-regulonActivity_byCellType_Scaled <- t(scale(t(regulonActivity_byCellType), center = T, scale=T))
-
-ComplexHeatmap::Heatmap(regulonActivity_byCellType, name="Regulon activity")
-#Be careful about scaling and centering the data
-ComplexHeatmap::Heatmap(regulonActivity_byCellType_Scaled, name="Regulon activity")
-```
 
 
 
