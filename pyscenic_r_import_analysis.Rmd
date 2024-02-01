@@ -117,8 +117,8 @@ Find_diff_TFs <- function(celltype) {
   for (tf in tfs) {
     p_val_tf <- wilcox.test(wt_data[,tf],tet2_data[,tf],paired = FALSE)$p.value
     diffexptf_wt_tet2[tf] <- p_val_tf
-    median_wt <- median(wt_data[,tf])
-    median_tet2 <- median(tet2_data[,tf])
+    median_wt <- median(wt_data[,tf]) + 0.000000001
+    median_tet2 <- median(tet2_data[,tf]) + 0.000000001
     comp_median <- (median_tet2/median_wt)
     foldchange_auc <- log2((abs(comp_median))^(sign(comp_median)))
     log2_fc_tf_tet2[tf] <- foldchange_auc
@@ -149,8 +149,8 @@ Find_diff_TFs <- function(celltype) {
   log2_fc_tf_dnmt3a <- c()
   for (tf in tfs) {
     p_val_tf <- wilcox.test(wt_data[,tf],dnmt3a_data[,tf],paired = FALSE)$p.value
-    median_wt <- median(wt_data[,tf])
-    median_dnmt3a <- median(dnmt3a_data[,tf])
+    median_wt <- median(wt_data[,tf]) + 0.000000001 
+    median_dnmt3a <- median(dnmt3a_data[,tf]) + 0.000000001 
     comp_median <- (median_dnmt3a/median_wt)
     foldchange_auc <- log2((abs(comp_median))^(sign(comp_median)))
     diffexptf_wt_dnmt3a[tf] <- p_val_tf
@@ -186,17 +186,20 @@ sig_Tfs <- function(df, threshold = 1.3) {
 
 
 
-
+#Use the function Find_diff_TFs to find the p-values for the TFs across the cell types 
 ```{r}
 celltypes <- levels(cellInfo$seurat_clusters) 
 
 #In order to run this function : regulonAUC, regulons and tfs must be defined 
+#Note this function is based on the median 
 
 p_val_all <- lapply(celltypes,Find_diff_TFs) #Warnings are for vascular fibroblasts 
 names(p_val_all) <- celltypes
 
 ```
 
+
+#=====================================Wt vs Tet2 ====================================================
 
 ```{r}
 # Extract all first data frames from each pair which are comparissions between 
@@ -213,6 +216,151 @@ wt_tet2_pval <- do.call(cbind, wt_tet2_pval) %>%
 wt_tet2_fc <- lapply(p_val_all, function(pair) pair[[2]])
 wt_tet2_fc <- do.call(cbind, wt_tet2_fc) %>% 
                 as.data.frame()
+```
+
+
+
+```{r}
+for (celltype in celltypes) {
+    #Only for resident like macrophages between wt vs tet2 : 
+    df_ct <- cbind(wt_tet2_pval[,celltype],
+                 wt_tet2_fc[,celltype]) %>%
+            as.data.frame() %>%
+            rename(p_val = "V1",
+                   log2fc = "V2") %>%
+            mutate(p_adj = p.adjust(p_val,method = "BH")) %>%
+            mutate(y= -log10(p_adj)) %>%
+            mutate(y = pmin(y, 20))
+    
+   df_ct$log2fc <- ifelse(df_ct$log2fc > 0.25, 0.25,
+                  ifelse(df_ct$log2fc < -0.25, -0.25,
+                         df_ct$log2fc))
+   
+  row.names(df_ct) <- rownames(wt_tet2_pval)
+
+  # add a column of NAs
+  df_ct$diffregulated <- "NO"
+  # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+  df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$y >= 10] <- "UP"
+  # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+  df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$y >= 10] <- "DOWN"
+
+   # Create a new column "delabel" to de, that will contain the name of genes    
+   #differentially expressed (NA in case they are not)
+    df_ct$delabel <- NA
+    df_ct$delabel[df_ct$diffregulated != "NO"] <-
+    rownames(df_macs[df_ct$diffregulated != "NO",])
+    
+    #Make the volcano plot
+    plot <- ggplot(data=df_ct, aes(x=log2fc, y= y, col=diffregulated,
+                         label = delabel))+ 
+    geom_point() + 
+    theme_minimal()+
+    geom_text() +
+    ggtitle(label = paste({{celltype}}," Tet2 vs Wt",sep = ":"))
+    print(plot)
+  }
+```
+
+
+
+
+
+#=====================================Wt vs Dnmt3a ====================================================
+
+
+
+
+```{r}
+# Extract all first data frames from each pair which are comparissions between 
+#wt vs tet2
+wt_dnmt3a_pval <- lapply(p_val_all, function(pair) pair[[3]])
+
+# Use do.call and cbind to bind all first data frames together
+wt_dnmt3a_pval <- do.call(cbind, wt_dnmt3a_pval) %>% 
+                as.data.frame()
+```
+
+
+```{r}
+wt_dnmt3a_fc <- lapply(p_val_all, function(pair) pair[[4]])
+wt_dnmt3a_fc <- do.call(cbind, wt_dnmt3a_fc) %>% 
+                as.data.frame()
+```
+
+
+
+```{r, warning=FALSE}
+for (celltype in celltypes) {
+    #Only for resident like macrophages between wt vs tet2 : 
+    df_ct <- cbind(wt_dnmt3a_pval[,celltype],
+                 wt_dnmt3a_fc[,celltype]) %>%
+            as.data.frame() %>%
+            rename(p_val = "V1",
+                   log2fc = "V2") %>%
+            mutate(p_adj = p.adjust(p_val,method = "BH")) %>%
+            mutate(y= -log10(p_adj)) %>%
+            mutate(y = pmin(y, 20))
+    
+   df_ct$log2fc <- ifelse(df_ct$log2fc > 0.25, 0.25,
+                  ifelse(df_ct$log2fc < -0.25, -0.25,
+                         df_ct$log2fc))
+   
+  row.names(df_ct) <- rownames(wt_dnmt3a_pval)
+
+  # add a column of NAs
+  df_ct$diffregulated <- "NO"
+  # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+  df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$y >= 4] <- "UP"
+  # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+  df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$y >= 4] <- "DOWN"
+
+   # Create a new column "delabel" to de, that will contain the name of genes    
+   #differentially expressed (NA in case they are not)
+    df_ct$delabel <- NA
+    df_ct$delabel[df_ct$diffregulated != "NO"] <-
+    rownames(df_macs[df_ct$diffregulated != "NO",])
+    
+    #Make the volcano plot
+    plot <- ggplot(data=df_ct, aes(x=log2fc, y= y, col=diffregulated,
+                         label = delabel))+ 
+    geom_point() + 
+    theme_minimal()+
+    geom_text() +
+    ggtitle(label = paste({{celltype}},"DNMT3A vs Wt",sep = ":"))
+    print(plot)
+  }
+```
+
+
+
+
+#========================================================================================
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+find_top_regulons(celltypes)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
 
 #Only for resident like macrophages between wt vs tet2 : 
 df_macs <- cbind(wt_tet2_pval$`Resident-like Macrophages`,
@@ -245,9 +393,6 @@ df_macs$diffexpressed[df_macs$log2fc < -0.05 & df_macs$y >= 10] <- "DOWN"
 # Create a new column "delabel" to de, that will contain the name of genes differentially expressed (NA in case they are not)
 df_macs$delabel <- NA
 df_macs$delabel[df_macs$diffexpressed != "NO"] <- rownames(df_macs[df_macs$diffexpressed != "NO",])
-
-
-
 
 ggplot(data=df_macs, aes(x=log2fc, y= y, col=diffexpressed,
                          label = delabel))+ 
@@ -401,7 +546,21 @@ VlnPlot(res_macs_seurat, features = "Klf2",split.by = "genotype")
 
 
 
+#Find target genes of Jun between Wt and tet2 
+```{r}
+target_genes_Lef1 <- regulons$`Lef1(+)`
+#rdaDir <- ("./data/week30/rda/")
+#load(file = paste0(rdaDir,"merged_seurat_harmony.rda"))
+#library(Seurat)
+features = target_genes_Lef1[40:50]
+res_macs_seurat <- subset(merged_seurat_harmony,
+                          seurat_clusters == "Resident-like Macrophages" &
+                          (genotype =="wt_45_1"| genotype =="tet2_45_2"))
 
+VlnPlot(res_macs_seurat, features = features,split.by = "genotype")
+
+
+```
 
 
 
