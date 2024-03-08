@@ -10,6 +10,15 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+
+```{bash}
+tar -xvzf GSE225773_RAW.tar
+rm GSE225773_RAW.tar
+#keep the files in the different directories based on their day i.e, day 30 and day 15
+```
+
+
+
 # Setting the directory and load required packages  
 
 ```{r}
@@ -30,15 +39,17 @@ library(GMCM)
 library(matrixStats)
 library(SCENIC)
 library(RcisTarget)
+library(reticulate)
+library(sceasy)
 #devtools::install_github('immunogenomics/presto')
 #install.packages("remotes")
 #remotes::install_github("chris-mcginnis-ucsf/DoubletFinder")
-setwd("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/")
+#setwd("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/")
 getwd()
 #Set the data dir to week 30 
-dataDir <- ("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/data/week30/")
-rdaDir <- ("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/data/week30/rda/")
-imp_figs <- ("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/imp_figs/")
+dataDir <- ("/Users/xsankt/Desktop/proj1_tet_dnmt3a_mouse/data/week30/")
+rdaDir <- ("/Users/xsankt/Desktop/proj1_tet_dnmt3a_mouse/data/week30/rda/")
+
 ```
 
 
@@ -106,7 +117,7 @@ convert_human_to_mouse <- function(gene_list){
   
   return (output)
 }
-```
+``` 
 
 #Setting the cell cyle genes and converting the human to mouse genes  
   
@@ -160,13 +171,6 @@ merged_seurat[["percent.mt"]] <- PercentageFeatureSet(merged_seurat, pattern = "
 plot1 <- FeatureScatter(merged_seurat, feature1 = "nCount_RNA", feature2 = "percent.mt")
 plot2 <- FeatureScatter(merged_seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 plot1 + plot2
-```
-
-```{r}
-#First subset based on mitochondrial percentage : 
-merged_seurat <- subset(merged_seurat, subset = nFeature_RNA > 200 & nFeature_RNA < 4400 & percent.mt < 15)
-#Normalize the data 
-merged_seurat <- Seurat::NormalizeData(merged_seurat, verbose = FALSE) 
 ```
 
 
@@ -270,12 +274,14 @@ sweep.stats <- summarizeSweep(sweep.list)
 bcmvn <- find.pK(sweep.stats)
 nExp <- round(0.03*nrow(merged_seurat_harmony@meta.data)) 
 merged_seurat_doublets <- doubletFinder(merged_seurat_harmony, PCs = 1:8, pN = 0.25, pK = 0.09, nExp = nExp, reuse.pANN = FALSE, sct = FALSE)
-merged_seurat_harmony = merged_seurat_doublets[, merged_seurat_doublets@meta.data[, DF.classifications_0.25_0.09_510] == "Singlet"]
+# merged_seurat_harmony = merged_seurat_doublets[, merged_seurat_doublets@meta.data[, DF.classifications_0.25_0.09_510] == "Singlet"]
+
+#Subset the merged_doublets by keeping only the singlets 
 merged_seurat_harmony = subset(x = merged_seurat_doublets, subset = DF.classifications_0.25_0.09_510 == "Singlet")
-rm(merged_seurat)
+rm(merged_seurat,merged_seurat_doublets)
 save.image(file = paste0(rdaDir,"merged_seurat_harmony.rda"))
-dataDir <- ("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/data/week30/")
-rdaDir <- ("/Users/sanketh/Desktop/proj1_tet_dnmt3a_mut/data/week30/rda/")
+rdaDir <- ("/Users/xsankt/Desktop/proj1_tet_dnmt3a_mouse/data/week30/rda/")
+cellInfo <- merged_seurat_harmony@meta.data
 ```
 
 ```{r}
@@ -421,62 +427,9 @@ ggplot(dist_genotype_ann) +
 
 
 
-
-
-
 ```{r}
 cellInfo$genotype_clusters <- as.factor(cellInfo$genotype_clusters)
 cellInfo$genotype_clusters
-```
-
-
-```{r}
-##Finding the most variable features 
-
-Sds <- t(merged_seurat_harmony@assays$RNA$data) %>%
-       as.matrix() %>%
-       colSds(na.rm = T)
-
-gene_var <- as_tibble((Sds))
-
-features <- rownames(merged_seurat_harmony)
-
-variance_genes <- cbind(features,gene_var) %>%
-                  rename(variance = value)
-
-
-data(list = "motifAnnotations_mgi_v9" ,package = "RcisTarget")
-
-tfs <- unique(motifAnnotations_mgi_v9$TF)
-
-var_all_tfs <- variance_genes[variance_genes$features %in% tfs,]
-
-ggplot(variance_genes) +
-  aes(x = variance) +
-  geom_histogram(bins = 200) +
-  ylim(c(0,500)) +
-  xlim(c(0,1.3)) + 
-  theme_classic()
-
-variance_genes[(variance_genes$variance >= 0.5) | (variance_genes$features %in% tfs),]
-var_all_tfs[var_all_tfs$variance >= 0.3,]
-
-```
-
-
-```{r}
-ggplot(var_all_tfs) +
-  aes(x = variance) +
-  geom_histogram(bins = 200) +
-  ylim(c(0,70)) +
-  xlim(c(0,1)) + 
-  theme_classic()
-```
-
-
-```{r}
-var_genes <- variance_genes[variance_genes$variance >= 0.5 | 
-                              variance_genes$features %in% tfs,]$features
 ```
 
 
@@ -512,25 +465,11 @@ FeaturePlot(merged_seurat_harmony, features = c ("Jun"), split.by = "mutation")
 
 
 
-```{r}
-# Ridge plots - from ggridges. Visualize single cell expression distributions in each cluster
-features = "Cd19"
-RidgePlot(merged_seurat_harmony, features = features, ncol = 2)
-```
 
 
 
 
 
-```{r}
-VlnPlot(merged_seurat_harmony, features = features)
-```
-
-
-```{r}
-features = "Jun"
-VlnPlot(merged_seurat_harmony, features = features, split.by = "mutation")
-```
 
 
 ```{r}
@@ -556,42 +495,15 @@ VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
 ```
 
 
-```{r}
-features = "Maf"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
-
-
-```{r}
-features = "Cebpb"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
-
-
-```{r}
-features = "Nlrp3"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
 
 
 
-```{r}
-features = "Fosb"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
-
-
-```{r}
-features = "Jun"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
 
 
 
-```{r}
-features = "Atf3"
-VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
-```
+
+
+
 
 
 ```{r}
@@ -604,11 +516,6 @@ features = "Klf4"
 VlnPlot(merged_seurat_harmony, features = features,split.by = "mutation")
 ```
 
-
-
-
-
-
 ##Subsetting seurat objects into 5 different objects based on their 
 #genotype to run SCENIC to see if there are any potential differnces 
 ```{r}
@@ -619,6 +526,7 @@ save.image(paste0(rdaDir,"seurat_objs_genotypes_noidents.rda")) #Can directly lo
 ```{r}
 #Idents(dnmt3a_45_1_seurat)
 ```
+
 ```{r}
 table(merged_seurat_harmony@meta.data$genotype_clusters)
 ```
@@ -631,13 +539,14 @@ table(merged_seurat_harmony@meta.data$seurat_clusters)
 table(merged_seurat_harmony@meta.data$genotype_clusters_ind)
 ```
 
+
 ##Subsetting the seurat object such that it has all the highly variable genes and all the TFs 
 ```{r}
-variance_genes <- VariableFeatures(merged_seurat_harmony)
+#variance_genes <- VariableFeatures(merged_seurat_harmony)
 data(list = "motifAnnotations_mgi_v9" ,package = "RcisTarget")
 tfs <- unique(motifAnnotations_mgi_v9$TF)
-tfs <- setdiff(tfs,variance_genes)
-var_genes <- c(variance_genes,tfs)
+tfs <- setdiff(tfs,var_genes)
+var_genes <- c(var_genes,tfs)
 merged_seurat_harmony <- subset(merged_seurat_harmony,features = var_genes)
 dim(merged_seurat_harmony)
 ```
@@ -646,39 +555,94 @@ merged_seurat_harmony@assays
 ```
 
 
-##Convert seurat object to h5ad object that can be imported directly into python
 ```{r}
-##Convert seurat object to anndata object 
-library(Seurat)
-library(SeuratDisk)
-#Convert into s3 object 
-merged_seurat_harmony[["RNA"]] <- as(merged_seurat_harmony[["RNA"]], "Assay")
-SaveH5Seurat(merged_seurat_harmony, filename = "merged_seurat.h5Seurat")
-Convert("merged_seurat.h5Seurat", dest = "h5ad")
+library(ggplot2)
+#Acess the feature data from the seurat object 
+features_metadata <- merged_seurat_harmony[["RNA"]][[]]
+
+ggplot(features_metadata,
+       aes(x = vf_vst_counts_mean,
+           y = vf_vst_counts_variance)) +
+  geom_point()
+
+features_metadata$vf_vst_counts_variance.standardized
+
+ggplot(features_metadata,
+       aes(x = vf_vst_counts_variance.standardized))+
+  geom_histogram()+
+  xlim(c(0.6,1.8)) + 
+  ylim(c(0,4000))
+  #scale_x_continuous(limits = c(0.8,1.8),
+       #breaks = seq(0.8, 1.8, by = 0.1))+
+  #ylim(0,1500)+
+  #geom_density()
+
+#features_metadata <- features_metadata %>%
+                     #filter(vf_vst_counts_variable == "TRUE")
+
+                     
+ggplot(features_metadata,
+       aes(x = vf_vst_counts_mean,
+           y = vf_vst_counts_variance.standardized))+
+  geom_point()+
+  xlim(c(0,40))+
+  scale_x_log10() +
+  ylim(c(0,15))
+
+
+num_var_genes <- nrow(features_metadata[
+  features_metadata$vf_vst_counts_variance.standardized >= 1,])
+
+features_metadata$scaled_log10_vf_vst_counts_variance <- log10(features_metadata$vf_vst_counts_variance.standardized)
+
+```
+
+
+```{r}
+exprMat <- merged_seurat_harmony@assays$RNA$counts
+
+#Min counts per gene : 
+minCountsPerGene=3*.01*ncol(exprMat)
+
+#Compute the row sums across the cells and make sure it is above the threshold
+counts_sum <- rowSums(exprMat)
+exprMat <- exprMat[counts_sum >= minCountsPerGene,]
+dim(exprMat)
+
+selected_genes <- rownames(exprMat)
+
+merged_seurat_loom = subset(merged_seurat_harmony,
+                            features = selected_genes)
+
+merged_seurat_loom = CreateSeuratObject(counts = merged_seurat_loom@assays$RNA$counts, assay = "RNA",
+meta.data = merged_seurat_loom@meta.data)
 ```
 
 
 
 ```{r}
-library(reticulate)
-#devtools::install_github("cellgeni/sceasy")
-library(sceasy)
 use_condaenv('pyscenic_env')
-merged_seurat_harmony[["RNA"]] <- as(merged_seurat_harmony[["RNA"]], "Assay")
-sceasy::convertFormat(merged_seurat_harmony, from="seurat", to="anndata",
+#merged_seurat_loom[["RNA"]] <- as(merged_seurat_loom[["RNA"]], "Assay")
+sceasy::convertFormat(merged_seurat_loom, from="seurat", to="anndata",
                        outFile='merged_seurat.h5ad')
 ```
-```{r}
-check_genes <- VariableFeatures(merged_seurat_doublets)
-```
 
 
 
 
-```{r}
-library(SCP)
-adata <- srt_to_adata(merged_seurat_harmony)
-adata$write_h5ad("merged_seurat.h5ad")
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

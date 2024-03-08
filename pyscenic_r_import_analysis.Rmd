@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##Importing the results from pyscenic 
 ```{r}
-pyScenicDir <- "./data/week30/pyscenic"
+pyScenicDir <- "./data/week30/data/pyscenic"
 library(SCENIC)
 library(tidyverse)
 ```
@@ -18,7 +18,7 @@ library(tidyverse)
 #Reading the loom file 
 ```{r}
 library(SCopeLoomR)
-pyScenicLoomFile <- file.path(pyScenicDir,"output.loom")
+pyScenicLoomFile <- file.path(pyScenicDir,"output_7.loom")
 loom <- open_loom(pyScenicLoomFile, mode = "r")
 ```
 
@@ -185,8 +185,9 @@ sig_Tfs <- function(df, threshold = 1.3) {
 ```
 
 
-
 #Use the function Find_diff_TFs to find the p-values for the TFs across the cell types 
+
+
 ```{r}
 celltypes <- levels(cellInfo$seurat_clusters) 
 
@@ -195,8 +196,8 @@ celltypes <- levels(cellInfo$seurat_clusters)
 
 p_val_all <- lapply(celltypes,Find_diff_TFs) #Warnings are for vascular fibroblasts 
 names(p_val_all) <- celltypes
-
 ```
+
 
 
 #=====================================Wt vs Tet2 ====================================================
@@ -220,9 +221,10 @@ wt_tet2_fc <- do.call(cbind, wt_tet2_fc) %>%
 
 
 
-```{r}
+```{r, warning=FALSE}
+#The p-val is for the comparission between wt vs tet2 for that particular cell type 
 for (celltype in celltypes) {
-    #Only for resident like macrophages between wt vs tet2 : 
+    
     df_ct <- cbind(wt_tet2_pval[,celltype],
                  wt_tet2_fc[,celltype]) %>%
             as.data.frame() %>%
@@ -244,15 +246,18 @@ for (celltype in celltypes) {
   df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$y >= 10] <- "UP"
   # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
   df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$y >= 10] <- "DOWN"
-
+ 
+  ##Change the colors to grey at the base : Make it more pretty overall 
+  
+  
    # Create a new column "delabel" to de, that will contain the name of genes    
    #differentially expressed (NA in case they are not)
     df_ct$delabel <- NA
     df_ct$delabel[df_ct$diffregulated != "NO"] <-
-    rownames(df_macs[df_ct$diffregulated != "NO",])
+    rownames(df_ct[df_ct$diffregulated != "NO",])
     
     #Make the volcano plot
-    plot <- ggplot(data=df_ct, aes(x=log2fc, y= y, col=diffregulated,
+    plot <- ggplot(data=df_ct, aes(x=log2fc, y= -log10(p_val), col=diffregulated,
                          label = delabel))+ 
     geom_point() + 
     theme_minimal()+
@@ -262,14 +267,83 @@ for (celltype in celltypes) {
   }
 ```
 
+```{r}
+library(ggrepel)
+```
+
+
+```{r, warning=FALSE}
+for (celltype in celltypes) {
+  
+    df_ct <- cbind(wt_tet2_pval[,celltype],
+                 wt_tet2_fc[,celltype]) %>%
+            as.data.frame() %>%
+            rename(p_val = "V1",
+                   log2fc = "V2") %>%
+            mutate(p_adj = p.adjust(p_val,method = "BH")) %>%
+            mutate(y= -log10(p_adj)) %>%
+            mutate(y = pmin(y, 20)) %>% 
+            mutate(minus_log10_p=-log10(p_val)) %>% 
+            mutate(minus_log10_p = pmin(minus_log10_p,30))
+    
+   df_ct$log2fc <- ifelse(df_ct$log2fc > 0.25, 0.25,
+                  ifelse(df_ct$log2fc < -0.25, -0.25,
+                         df_ct$log2fc))
+   
+  row.names(df_ct) <- rownames(wt_tet2_pval)
+
+
+  # add a column of NAs
+  df_ct$diffregulated <- "NS"
+  # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+  df_ct$diffregulated[df_ct$log2fc > 0.1 & df_ct$minus_log10_p >= 10] <- "UP"
+  # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+  df_ct$diffregulated[df_ct$log2fc < -0.1 & df_ct$minus_log10_p >= 10] <- "DOWN"
+ 
+  
+   # Create a new column "delabel" to de, that will contain the name of genes    
+   #differentially expressed (NA in case they are not)
+   df_ct$delabel <- NA
+   df_ct$delabel[df_ct$diffregulated != "NS"] <-
+   rownames(df_ct[df_ct$diffregulated != "NS",])
+  
+  
+   ##Adding the colors 
+    
+    cols <- c("UP" = "#ffad73", "DOWN" = "#26b3ff", "NS" = "grey") 
+    sizes <- c("UP" = 2, "DOWN" = 2, "NS" = 1) 
+    alphas <- c("UP" = 1, "DOWN" = 1, "NS" = 0.5)
+    
+    #Make the volcano plot
+    plot <- ggplot(data=df_ct,
+                   aes(x=log2fc, y = minus_log10_p,
+                       col=diffregulated,
+                       label=delabel)) + 
+    geom_point() + 
+    geom_hline(yintercept = 10,
+             linetype = "dashed") + 
+    geom_vline(xintercept = c(0.1,-0.1),
+             linetype = "dashed") +
+    ylab("-log10(p-val)") +
+    scale_colour_manual(values = cols) +
+    scale_size_manual(values = sizes) +  
+    scale_alpha_manual(values = alphas) +   
+    geom_label_repel() +
+    ggtitle(label = paste({{celltype}},"TET2 vs WT",sep = ":"))
+    print(plot)
+  }
+```
 
 
 
 
-#=====================================Wt vs Dnmt3a ====================================================
 
 
 
+
+
+
+#=====================================Wt vs Dnmt3a ==========================================
 
 ```{r}
 # Extract all first data frames from each pair which are comparissions between 
@@ -289,13 +363,13 @@ wt_dnmt3a_fc <- do.call(cbind, wt_dnmt3a_fc) %>%
 ```
 
 
-
 ```{r, warning=FALSE}
 for (celltype in celltypes) {
-    #Only for resident like macrophages between wt vs tet2 : 
+    threshold = 0.05/nrow(wt_dnmt3a_pval)
     df_ct <- cbind(wt_dnmt3a_pval[,celltype],
                  wt_dnmt3a_fc[,celltype]) %>%
             as.data.frame() %>%
+            `rownames<-`(.,rownames(wt_dnmt3a_pval)) %>%
             rename(p_val = "V1",
                    log2fc = "V2") %>%
             mutate(p_adj = p.adjust(p_val,method = "BH")) %>%
@@ -305,24 +379,22 @@ for (celltype in celltypes) {
    df_ct$log2fc <- ifelse(df_ct$log2fc > 0.25, 0.25,
                   ifelse(df_ct$log2fc < -0.25, -0.25,
                          df_ct$log2fc))
-   
-  row.names(df_ct) <- rownames(wt_dnmt3a_pval)
 
   # add a column of NAs
   df_ct$diffregulated <- "NO"
   # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
-  df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$y >= 4] <- "UP"
+  df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$y >= 5] <- "UP"
   # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
-  df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$y >= 4] <- "DOWN"
+  df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$y >= 5] <- "DOWN"
 
    # Create a new column "delabel" to de, that will contain the name of genes    
    #differentially expressed (NA in case they are not)
     df_ct$delabel <- NA
     df_ct$delabel[df_ct$diffregulated != "NO"] <-
-    rownames(df_macs[df_ct$diffregulated != "NO",])
+    rownames(df_ct[df_ct$diffregulated != "NO",])
     
     #Make the volcano plot
-    plot <- ggplot(data=df_ct, aes(x=log2fc, y= y, col=diffregulated,
+    plot <- ggplot(data=df_ct, aes(x=log2fc, y=-log10(p_val), col=diffregulated,
                          label = delabel))+ 
     geom_point() + 
     theme_minimal()+
@@ -333,26 +405,100 @@ for (celltype in celltypes) {
 ```
 
 
-
-
-#========================================================================================
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
-find_top_regulons(celltypes)
+library(ggrepel)
+```
+
+
+```{r, warning=FALSE}
+for (celltype in celltypes) {
+  
+    df_ct <- cbind(wt_dnmt3a_pval[,celltype],
+                 wt_dnmt3a_fc[,celltype]) %>%
+            as.data.frame() %>%
+            rename(p_val = "V1",
+                   log2fc = "V2") %>%
+            mutate(p_adj = p.adjust(p_val,method = "BH")) %>%
+            mutate(y= -log10(p_adj)) %>%
+            mutate(y = pmin(y, 20)) %>% 
+            mutate(minus_log10_p=-log10(p_val)) %>% 
+            mutate(minus_log10_p = pmin(minus_log10_p,30))
+    
+   df_ct$log2fc <- ifelse(df_ct$log2fc > 0.25, 0.25,
+                  ifelse(df_ct$log2fc < -0.25, -0.25,
+                         df_ct$log2fc))
+   
+  row.names(df_ct) <- rownames(wt_dnmt3a_pval)
+
+
+  # add a column of NAs
+  df_ct$diffregulated <- "NS"
+  # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+  df_ct$diffregulated[df_ct$log2fc > 0.05 & df_ct$minus_log10_p >= 5] <- "UP"
+  # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+  df_ct$diffregulated[df_ct$log2fc < -0.05 & df_ct$minus_log10_p >= 5] <- "DOWN"
+ 
+  
+   # Create a new column "delabel" to de, that will contain the name of genes    
+   #differentially expressed (NA in case they are not)
+   df_ct$delabel <- NA
+   df_ct$delabel[df_ct$diffregulated != "NS"] <-
+   rownames(df_ct[df_ct$diffregulated != "NS",])
+  
+  
+   ##Adding the colors 
+    
+    cols <- c("UP" = "#ffad73", "DOWN" = "#26b3ff", "NS" = "grey") 
+    sizes <- c("UP" = 2, "DOWN" = 2, "NS" = 1) 
+    alphas <- c("UP" = 1, "DOWN" = 1, "NS" = 0.5)
+    
+    #Make the volcano plot
+    plot <- ggplot(data=df_ct,
+                   aes(x=log2fc, y = minus_log10_p,
+                       col=diffregulated,
+                       label=delabel)) + 
+    geom_point() + 
+    geom_hline(yintercept = 5,
+             linetype = "dashed") + 
+    geom_vline(xintercept = c(0.05,-0.05),
+             linetype = "dashed") +
+    ylab("-log10(p-val)") +
+    scale_colour_manual(values = cols) +
+    scale_size_manual(values = sizes) +  
+    scale_alpha_manual(values = alphas) +   
+    geom_label_repel() +
+    ggtitle(label = paste({{celltype}},"DNMT3A vs WT",sep = ":"))
+    print(plot)
+  }
 ```
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#========================================================================================
 
 
 
@@ -402,16 +548,6 @@ ggplot(data=df_macs, aes(x=log2fc, y= y, col=diffexpressed,
 
 
 ```
-
-
-
-
-
-
-
-
-
-
 
 
 ```{r}
@@ -518,7 +654,7 @@ library(Seurat)
 features = target_genes_Jun[100:111]
 res_macs_seurat <- subset(merged_seurat_harmony,
                           seurat_clusters == "Resident-like Macrophages" &
-                          (genotype =="wt_45_1"| genotype =="tet2_45_2"))
+                          (genotype =="wt_45_1"| genotype =="dnmt3a_45_2"))
 
 VlnPlot(res_macs_seurat, features = features,split.by = "genotype")
 
@@ -526,9 +662,10 @@ VlnPlot(res_macs_seurat, features = features,split.by = "genotype")
 ```
 
 
-
+#Plotting some of the genes that are targeted by Jun(+) which is supposed be up in the tet2_45_2 
 ```{r}
-VlnPlot(res_macs_seurat, features = "Selenbp1",split.by = "genotype")
+target_genes_Jun <- regulons$`Jun(+)`
+VlnPlot(res_macs_seurat, features = "Irf7",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Egr2",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Klf2",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Lyl1",split.by = "genotype")
@@ -538,12 +675,17 @@ VlnPlot(res_macs_seurat, features = "Irf1",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Xbp1",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Ifi47",split.by = "genotype")
 VlnPlot(res_macs_seurat, features = "Fam46a",split.by = "genotype")
-VlnPlot(res_macs_seurat, features = "Klf2",split.by = "genotype")
+```
+
+```{r}
+VlnPlot(res_macs_seurat, features = "Maf",split.by = "genotype")
 ```
 
 
 
-
+```{r}
+VlnPlot(res_macs_seurat, features = "Jun",split.by = "genotype")
+```
 
 
 #Find target genes of Jun between Wt and tet2 
@@ -1011,7 +1153,7 @@ dr_coords <- Embeddings(merged_seurat_harmony, reduction="umap")
 
 ###Embedings in Seurat are also calulated only on the highly variable genes. 
 tfs <- c("Jun(+)")
-par(mfrow=c(2,2))
+par(mfrow=c(1,2))
 AUCell::AUCell_plotTSNE(dr_coords, cellsAUC=selectRegulons(regulonAUC, tfs), plots=c("AUC", "histogram","binary"), cex = .5)
 ```
 
@@ -1049,6 +1191,108 @@ wt_data[] <- lapply(wt_data, function(col) {
   return(col)
 })
 ```
+
+
+##============================Wt vs Tet2 : Residentlike macs  : Heatmap of target genes ==================================
+
+
+
+```{r}
+metadata_res_macs <- res_macs_seurat@meta.data
+metadata_res_macs$genotype <- as.factor(metadata_res_macs$genotype)
+res_macs_seurat@meta.data <- metadata_res_macs
+
+#load the seurat object for gene expression : 
+res_macs_seurat <- subset(merged_seurat_harmony,
+                          genotype == "dnmt3a_45_2"|
+                          genotype == "wt_45_1")
+
+res_macs_seurat <- subset(res_macs_seurat,
+                          seurat_clusters == "Resident-like Macrophages")
+
+target_genes_res_macs <- c(regulons$`Mef2c(+)`,regulons$`Nfia(+)`,regulons$`Irf1(+)`,
+                                regulons$`Maf(+)`)
+
+target_genes_res_macs_unique <- unique(target_genes_res_macs)
+```
+
+
+```{r}
+fct_wt <- subset(res_macs_seurat,
+                 features = target_genes_res_macs_unique,
+                 mutation == "wt")@assays$RNA$counts %>% 
+                 as.data.frame() %>% 
+                 mutate(fct_cell = round((rowSums(. != 0)/ncol(.)),2))
+
+fct_tet2 <- subset(res_macs_seurat,
+                 features = target_genes_res_macs_unique,
+                 mutation == "tet2")@assays$RNA$counts %>% 
+                 as.data.frame() %>% 
+                 mutate(fct_cell = round((rowSums(. != 0)/ncol(.)),2))
+
+fct_cells <- cbind(fct_wt$fct_cell, fct_tet2$fct_cell) %>% 
+             as.data.frame() %>% 
+             rename(wt = "V1",
+                    tet2 = "V2")
+
+```
+
+
+#==================================
+
+
+
+##====Wt vs DNMT3A : Residentlike macs  : Heatmap of target genes ==================================
+
+
+
+
+## Resident-like Macrophages : Wt and DNMT3A 
+```{r}
+res_macs_seurat <- subset(res_macs_seurat,features = target_genes_res_macs_unique)
+```
+
+##Fraction of cells expressing these target genes in the two conditions : 
+```{r}
+fct_wt <- subset(monocytes_seurat,
+                 features = target_genes_monocytes_unique,
+                 condition == "WT")@assays$RNA$counts %>% 
+                 as.data.frame() %>% 
+                 mutate(fct_cell = round((rowSums(. != 0)/ncol(.)),2))
+
+fct_dnmt3a <- subset(monocytes_seurat,
+                 features = target_genes_monocytes_unique,
+                 condition == "DNMT3A")@assays$RNA$counts %>% 
+                 as.data.frame() %>% 
+                 mutate(fct_cell = round((rowSums(. != 0)/ncol(.)),2))
+
+fct_cells <- cbind(fct_wt$fct_cell, fct_dnmt3a$fct_cell) %>% 
+             as.data.frame() %>% 
+             rename(WT = "V1",
+                    DNMT3A = "V2")
+
+```
+
+
+
+```{r}
+expr_mat <- subset(res_macs_seurat,
+                   features = target_genes_res_macs_unique)@assays$RNA$data %>% 
+            as.matrix() 
+metadata_res_macs <- res_macs_seurat@meta.data
+exp_ind <- sapply(split(rownames(metadata_res_macs), metadata_res_macs$genotype),
+                                     function(cells) rowMeans(expr_mat[,cells]))
+
+ComplexHeatmap::Heatmap(exp_ind[50:100,], 
+                        name="Gene Expression",
+                        row_names_gp = grid::gpar(fontsize = 8),
+                        column_names_gp = grid::gpar(fontsize = 6))
+
+
+```
+
+
+
 
 
 
